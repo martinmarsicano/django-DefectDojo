@@ -48,6 +48,7 @@ class System_Settings(models.Model):
     enable_jira = models.BooleanField(default=False, verbose_name='Enable JIRA integration', blank=False)
     jira_choices = (('Critical', 'Critical'), ('High', 'High'), ('Medium', 'Medium'), ('Low', 'Low'))
     jira_minimum_severity = models.CharField(max_length=20, blank=True, null=True, choices=jira_choices, default='None')
+    jira_labels = models.CharField(max_length=200, blank=True,null=True, help_text='JIRA issue labels space seperated')
     enable_slack_notifications = models.BooleanField(default=False, verbose_name='Enable Slack notifications', blank=False)
     slack_channel = models.CharField(max_length=100, default='', blank=True)
     slack_token = models.CharField(max_length=100, default='', blank=True, help_text='Token required for interacting with Slack. Get one at https://api.slack.com/tokens')
@@ -64,6 +65,7 @@ class System_Settings(models.Model):
                                                     help_text='With this setting turned on, Dojo will display S0, S1, S2, etc ' \
                                                     'in most places, whereas if turned off Critical, High, Medium, etc will be displayed.')
     false_positive_history = models.BooleanField(default=False)
+
     url_prefix = models.CharField(max_length=300, default='', blank=True)
     team_name = models.CharField(max_length=100, default='', blank=True)
     time_zone = models.CharField(max_length=50,
@@ -646,7 +648,7 @@ class Finding(models.Model):
     last_reviewed_by = models.ForeignKey(User, null=True, editable=False, related_name='last_reviewed_by')
     images = models.ManyToManyField('FindingImage', blank=True)
 
-    line_number = models.CharField(null=True, blank=True, max_length=200, editable=False)
+    line_number = models.CharField(null=True, blank=True, max_length=200, editable=False) #Deprecated will be removed, use line
     sourcefilepath = models.TextField(null=True, blank=True, editable=False)
     sourcefile = models.TextField(null=True, blank=True, editable=False)
     param = models.TextField(null=True, blank=True, editable=False)
@@ -1257,6 +1259,8 @@ admin.site.register(ScanSettings)
 admin.site.register(IPScan)
 admin.site.register(Alerts)
 admin.site.register(JIRA_Issue)
+admin.site.register(JIRA_Conf)
+admin.site.register(JIRA_PKey)
 admin.site.register(Tool_Configuration)
 admin.site.register(Tool_Product_Settings)
 admin.site.register(Tool_Type)
