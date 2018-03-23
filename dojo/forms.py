@@ -20,7 +20,7 @@ from dojo.models import Finding, Product_Type, Product, ScanSettings, VA, \
     Check_List, User, Engagement, Test, Test_Type, Notes, Risk_Acceptance, \
     Development_Environment, Dojo_User, Scan, Endpoint, Stub_Finding, Finding_Template, Report, FindingImage, \
     JIRA_Issue, JIRA_PKey, JIRA_Conf, UserContactInfo, Tool_Type, Tool_Configuration, Tool_Product_Settings, \
-    Cred_User, Cred_Mapping, System_Settings, Notifications
+    Cred_User, Cred_Mapping, System_Settings, Notifications, Languages, Language_Type, App_Analysis, Objects
 from dojo.utils import get_system_setting
 
 RE_DATE = re.compile(r'(\d{4})-(\d\d?)-(\d\d?)$')
@@ -238,7 +238,7 @@ class ImportScanForm(forms.Form):
                          ("OpenVAS CSV", "OpenVAS CSV"),
                          ("Snyk Scan", "Snyk Scan"),
                          ("Generic Findings Import", "Generic Findings Import"),
-                         ("SKF Scan", "SKF Scan"))
+                         ("SKF Scan", "SKF Scan"), ("Bandit Scan", "Bandit Scan"), ("SSL Labs Scan", "SSL Labs Scan"))
     SORTED_SCAN_TYPE_CHOICES = sorted(SCAN_TYPE_CHOICES, key=lambda x: x[1])
 
     scan_date = forms.DateTimeField(
@@ -249,7 +249,7 @@ class ImportScanForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'datepicker'}))
     minimum_severity = forms.ChoiceField(help_text='Minimum severity level to be imported',
                                          required=True,
-                                         choices=SEVERITY_CHOICES[0:4])
+                                         choices=SEVERITY_CHOICES)
     active = forms.BooleanField(help_text="Select if these findings are currently active.", required=False)
     verified = forms.BooleanField(help_text="Select if these findings have been verified.", required=False)
     scan_type = forms.ChoiceField(required=True, choices=SORTED_SCAN_TYPE_CHOICES)
@@ -1277,7 +1277,7 @@ class AddFindingImageForm(forms.ModelForm):
 FindingImageFormSet = modelformset_factory(FindingImage, extra=3, max_num=10, exclude=[''], can_delete=True)
 
 class JIRA_IssueForm(forms.ModelForm):
-    
+
     class Meta:
         model = JIRA_Issue
         exclude = ['product']
@@ -1295,20 +1295,63 @@ class JIRA_PKeyForm(forms.ModelForm):
         model = JIRA_PKey
         exclude = ['product']
 
+class DeleteJIRAConfForm(forms.ModelForm):
+    id = forms.IntegerField(required=True,
+                            widget=forms.widgets.HiddenInput())
+
+    class Meta:
+        model = JIRA_Conf
+        fields = ('id',)
+
+
 class ToolTypeForm(forms.ModelForm):
     class Meta:
         model = Tool_Type
         exclude = ['product']
 
+class LanguagesTypeForm(forms.ModelForm):
+    class Meta:
+        model = Languages
+        exclude = ['product']
+
+class Languages_TypeTypeForm(forms.ModelForm):
+    class Meta:
+        model = Language_Type
+        exclude = ['product']
+
+class App_AnalysisTypeForm(forms.ModelForm):
+    class Meta:
+        model = App_Analysis
+        exclude = ['product']
 
 class ToolConfigForm(forms.ModelForm):
     tool_type = forms.ModelChoiceField(queryset=Tool_Type.objects.all(), label='Tool Type')
     ssh = forms.CharField(widget=forms.Textarea(attrs={}), required=False, label='SSH Key')
-
     class Meta:
         model = Tool_Configuration
         exclude = ['product']
 
+    def clean(self):
+        from django.core.validators import URLValidator
+        form_data = self.cleaned_data
+
+        try:
+            url_validator = URLValidator(schemes=['ssh','http', 'https'])
+            url_validator(form_data["url"])
+        except forms.ValidationError:
+            raise forms.ValidationError(
+                'It does not appear as though this endpoint is a valid URL/SSH or IP address.',
+                code='invalid')
+
+        return form_data
+
+class DeleteObjectsSettingsForm(forms.ModelForm):
+    id = forms.IntegerField(required=True,
+                            widget=forms.widgets.HiddenInput())
+
+    class Meta:
+        model = Objects
+        exclude = ['tool_type']
 
 class DeleteToolProductSettingsForm(forms.ModelForm):
     id = forms.IntegerField(required=True,
@@ -1327,6 +1370,43 @@ class ToolProductSettingsForm(forms.ModelForm):
         fields = ['name', 'description', 'url', 'tool_configuration', 'tool_project_id']
         exclude = ['tool_type']
         order = ['name']
+
+    def clean(self):
+        from django.core.validators import URLValidator
+        form_data = self.cleaned_data
+
+        try:
+            url_validator = URLValidator(schemes=['ssh','http', 'https'])
+            url_validator(form_data["url"])
+        except forms.ValidationError:
+            raise forms.ValidationError(
+                'It does not appear as though this endpoint is a valid URL/SSH or IP address.',
+                code='invalid')
+
+        return form_data
+
+class ObjectSettingsForm(forms.ModelForm):
+
+    tags = forms.CharField(widget=forms.SelectMultiple(choices=[]),
+                           required=False,
+                           help_text="Add tags that help describe this object.  "
+                                     "Choose from the list or add new tags.  Press TAB key to add.")
+
+    class Meta:
+        model = Objects
+        fields = ['path', 'folder', 'artifact', 'name', 'review_status']
+        exclude = ['product']
+
+    def __init__(self, *args, **kwargs):
+        tags = Tag.objects.usage_for_model(Objects)
+        t = [(tag.name, tag.name) for tag in tags]
+        super(ObjectSettingsForm, self).__init__(*args, **kwargs)
+        self.fields['tags'].widget.choices = t
+
+    def clean(self):
+        form_data = self.cleaned_data
+
+        return form_data
 
 
 class CredMappingForm(forms.ModelForm):
@@ -1369,7 +1449,7 @@ class CredUserForm(forms.ModelForm):
 
 
 class JIRAPKeyForm(forms.ModelForm):
-    conf = forms.ModelChoiceField(queryset=JIRA_Conf.objects.all(), label='JIRA Configuration')
+    conf = forms.ModelChoiceField(queryset=JIRA_Conf.objects.all(), label='JIRA Configuration', required=False)
 
     class Meta:
         model = JIRA_PKey

@@ -50,13 +50,13 @@ def sync_false_history(new_finding, *args, **kwargs):
 def sync_dedupe(new_finding, *args, **kwargs):
     eng_findings_cwe = Finding.objects.filter(test__engagement__product=new_finding.test.engagement.product,
                                               cwe=new_finding.cwe, static_finding=new_finding.static_finding,
-                                              dynamic_finding=new_finding.dynamic_finding).exclude(id=new_finding.id).exclude(cwe=None)
+                                              dynamic_finding=new_finding.dynamic_finding, date__lte=new_finding.date).exclude(id=new_finding.id).exclude(cwe=None).exclude(duplicate=True)
     eng_findings_title = Finding.objects.filter(test__engagement__product=new_finding.test.engagement.product,
                                                 title=new_finding.title,
                                                 static_finding=new_finding.static_finding,
-                                                dynamic_finding=new_finding.dynamic_finding).exclude(id=new_finding.id)
+                                                dynamic_finding=new_finding.dynamic_finding, date__lte=new_finding.date).exclude(id=new_finding.id).exclude(duplicate=True)
     total_findings = eng_findings_cwe | eng_findings_title
-    total_findings = total_findings.order_by('date')
+    #total_findings = total_findings.order_by('date')
     for find in total_findings:
         if find.endpoints != None:
             list1 = new_finding.endpoints.all()
@@ -712,9 +712,10 @@ def log_jira_message(text, finding):
 def add_labels(find, issue):
     #Update Label with Security
     system_settings = System_Settings.objects.get()
-    labels = system_settings.jira_labels.split()
-    for label in labels:
-        issue.fields.labels.append(label)
+    if labels is not None:
+        labels = system_settings.jira_labels.split()
+        for label in labels:
+            issue.fields.labels.append(label)
     #Update the label with the product name (underscore)
     prod_name = find.test.engagement.product.name.replace(" ", "_")
     issue.fields.labels.append(prod_name)
@@ -970,11 +971,15 @@ def _unpad_string(value):
     return value
 
 def dojo_crypto_encrypt(plaintext):
-    key = None
-    key = get_db_key()
+    data = None
+    if plaintext:
+        key = None
+        key = get_db_key()
 
-    iv =  os.urandom(16)
-    return prepare_for_save(iv, encrypt(key, iv, plaintext.encode('ascii', 'ignore')))
+        iv =  os.urandom(16)
+        data = prepare_for_save(iv, encrypt(key, iv, plaintext.encode('ascii', 'ignore')))
+
+    return data
 
 def prepare_for_save(iv, encrypted_value):
     stored_value = None
@@ -1074,11 +1079,11 @@ def create_notification(event=None, **kwargs):
 
     def send_alert_notification(user=None):
         icon = kwargs.get('icon', 'info-circle')
-        alert = Alerts(user_id=user, 
+        alert = Alerts(user_id=user,
                        title=kwargs.get('title'),
                        description=create_notification_message(event, 'alert'),
                        url=kwargs.get('url', reverse('alerts')),
-                       icon=icon, 
+                       icon=icon,
                        source=Notifications._meta.get_field(event).verbose_name.title())
         alert.save()
 
@@ -1127,7 +1132,6 @@ def create_notification(event=None, **kwargs):
 
         if mail_enabled and 'mail' in getattr(notifications, event):
             send_mail_notification(user.email)
-                
+
         if 'alert' in getattr(notifications, event):
             send_alert_notification(user)
-                
